@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
 import { BottomNav } from "@/components/bottom-nav";
+import { OfflineSync } from "@/components/offline-sync";
 import { SetupNeeded } from "@/components/setup-needed";
 import { ServiceWorker } from "@/components/service-worker";
 import { missingEnv } from "@/lib/env";
@@ -30,6 +31,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <SetupNeeded missing={missing} />
         ) : (
           <>
+            <OfflineSync />
             {children}
             <BottomNav />
           </>

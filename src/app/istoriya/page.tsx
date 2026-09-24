@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ErrorBox } from "@/components/error-box";
 import { UndoButton } from "@/components/undo-button";
 import { startOfDay, startOfWeek } from "@/lib/dates";
-import { KIND_LABELS, formatDateTime, formatQty, formatTime } from "@/lib/format";
+import { KIND_LABELS, formatDateTime, formatMoney, formatQty, formatTime } from "@/lib/format";
 import {
   listMovementsSince,
   movementSummary,
@@ -35,6 +35,8 @@ export default async function HistoryPage({ searchParams }: PageProps<"/istoriya
   }
 
   const sold = summary.filter((row) => row.sold > 0).sort((a, b) => b.sold - a.sold);
+  const revenue = summary.reduce((total, row) => total + row.revenue, 0);
+  const unpriced = summary.filter((row) => row.unpriced_sales > 0).map((row) => row.name);
   const delivered = summary.filter((row) => row.delivered > 0).sort((a, b) => b.delivered - a.delivered);
 
   return (
@@ -56,6 +58,16 @@ export default async function HistoryPage({ searchParams }: PageProps<"/istoriya
 
       {loadError ? <ErrorBox error={loadError} /> : null}
 
+      <section className="card flex flex-col gap-1 text-center">
+        <h2 className="text-xl font-semibold text-muted">Оборот</h2>
+        <p className="text-5xl font-bold">{formatMoney(revenue)}</p>
+        {unpriced.length > 0 && (
+          <p className="mt-2 text-lg text-muted">
+            Без цена (не са в оборота): {unpriced.join(", ")}. Задайте цена от екрана на продукта.
+          </p>
+        )}
+      </section>
+
       <section className="card flex flex-col gap-3">
         <h2 className="text-2xl font-bold">Продадено</h2>
         {sold.length === 0 ? (
@@ -65,8 +77,13 @@ export default async function HistoryPage({ searchParams }: PageProps<"/istoriya
             {sold.map((row) => (
               <li key={row.product_id} className="flex items-center justify-between gap-3 py-2 text-xl">
                 <span className="font-semibold">{row.name}</span>
-                <span className="shrink-0 font-bold">
-                  {formatQty(row.sold)} {row.unit}
+                <span className="flex shrink-0 flex-col items-end">
+                  <span className="font-bold">
+                    {formatQty(row.sold)} {row.unit}
+                  </span>
+                  {row.revenue > 0 && (
+                    <span className="text-lg text-muted">{formatMoney(row.revenue)}</span>
+                  )}
                 </span>
               </li>
             ))}

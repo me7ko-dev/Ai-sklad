@@ -7,6 +7,9 @@ export async function proxy(request: NextRequest) {
   // Без настройки нека страницата сама покаже какво липсва.
   if (missingEnv().length > 0) return NextResponse.next();
 
+  // Страницата за работа без интернет няма данни в себе си — достъпна е винаги.
+  if (request.nextUrl.pathname === "/bez-internet") return NextResponse.next();
+
   const loggedIn = await isValidToken(request.cookies.get(AUTH_COOKIE)?.value);
   const onLogin = request.nextUrl.pathname === "/vhod";
 

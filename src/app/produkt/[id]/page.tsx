@@ -5,7 +5,7 @@ import { BackLink } from "@/components/back-link";
 import { ErrorBox } from "@/components/error-box";
 import { MovementForm } from "@/components/movement-form";
 import { ProductForm } from "@/components/product-form";
-import { KIND_LABELS, formatDateTime, formatQty } from "@/lib/format";
+import { KIND_LABELS, formatDateTime, formatMoney, formatQty } from "@/lib/format";
 import { getProduct, isLow, listMovements, listProducts } from "@/lib/products";
 import { updateProductAction } from "../../actions";
 
@@ -66,6 +66,11 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
             {product.quantity <= 0 ? "⚠ Свърши!" : "⚠ Свършва — време е за поръчка"}
           </p>
         )}
+        {product.price != null && (
+          <p className="mt-2 text-2xl font-semibold">
+            {formatMoney(product.price)} / {product.unit}
+          </p>
+        )}
         <p className="mt-2 text-lg text-muted">
           Предупреждение при {formatQty(product.min_quantity)} {product.unit}
           {product.supplier ? ` · Доставчик: ${product.supplier}` : ""}
@@ -76,6 +81,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
         <h2 className="text-2xl font-bold">Какво се случи?</h2>
         <MovementForm
           productId={product.id}
+          name={product.name}
           unit={product.unit}
           quantity={product.quantity}
         />

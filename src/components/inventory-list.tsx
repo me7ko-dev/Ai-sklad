@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { formatQty } from "@/lib/format";
+import { formatMoney, formatQty } from "@/lib/format";
 
 type Item = {
   id: string;
   name: string;
   unit: string;
   quantity: number;
+  price: number | null;
   low: boolean;
 };
 
@@ -45,6 +46,11 @@ export function InventoryList({ items }: { items: Item[] }) {
             >
               <span className="flex min-w-0 flex-col">
                 <span className="text-2xl font-bold break-words">{item.name}</span>
+                {item.price != null && (
+                  <span className="text-lg text-muted">
+                    {formatMoney(item.price)} / {item.unit}
+                  </span>
+                )}
                 {item.low && (
                   <span className="text-xl font-bold text-danger">
                     {item.quantity <= 0 ? "⚠ Свърши!" : "⚠ Свършва"}

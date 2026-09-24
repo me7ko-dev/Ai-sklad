@@ -11,7 +11,7 @@ const TABS = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  if (pathname === "/vhod") return null;
+  if (pathname === "/vhod" || pathname === "/bez-internet") return null;
 
   return (
     <nav

@@ -21,6 +21,7 @@ export default async function InventoryPage() {
       name: product.name,
       unit: product.unit,
       quantity: product.quantity,
+      price: product.price,
       low: isLow(product),
     }))
     .sort((a, b) => Number(b.low) - Number(a.low) || a.name.localeCompare(b.name, "bg"));

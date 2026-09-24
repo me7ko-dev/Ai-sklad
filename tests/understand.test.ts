@@ -10,6 +10,7 @@ const product = (id: string, name: string, unit = "бут."): Product => ({
   min_quantity: 2,
   supplier: null,
   pack_size: null,
+  price: null,
   aliases: [],
 });
 

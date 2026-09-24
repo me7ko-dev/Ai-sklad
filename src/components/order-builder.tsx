@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { formatQty } from "@/lib/format";
 import {
+  NO_SUPPLIER,
   groupBySupplier,
   orderMessage,
   suggestedAmount,
@@ -12,6 +14,7 @@ import {
 
 type Item = OrderProduct & { low: boolean };
 type Line = { included: boolean; amount: string };
+type Contact = { phone: string | null; email: string | null };
 
 function parseAmount(value: string): number | null {
   const number = Number(value.trim().replace(",", "."));
@@ -22,7 +25,20 @@ function showAmount(value: number): string {
   return String(Math.round(value * 1000) / 1000).replace(".", ",");
 }
 
-export function OrderBuilder({ products, shopName }: { products: Item[]; shopName: string | null }) {
+// „0888 123 456“ → „0888123456“ за tel: и sms: връзките.
+function dialable(phone: string): string {
+  return phone.replace(/[^\d+]/g, "");
+}
+
+export function OrderBuilder({
+  products,
+  shopName,
+  contacts,
+}: {
+  products: Item[];
+  shopName: string | null;
+  contacts: Record<string, Contact>;
+}) {
   const [lines, setLines] = useState<Record<string, Line>>(() =>
     Object.fromEntries(
       products
@@ -76,10 +92,20 @@ export function OrderBuilder({ products, shopName }: { products: Item[]; shopNam
         const message = orderMessage(orderLines, supplier, shopName, formatQty);
         const encoded = encodeURIComponent(message);
         const empty = orderLines.length === 0;
+        const contact = contacts[supplier.toLocaleLowerCase("bg")];
+        const subject = encodeURIComponent(`Поръчка${shopName ? ` — ${shopName}` : ""}`);
+        const disabled = empty ? "pointer-events-none opacity-50" : "";
 
         return (
           <section key={supplier} className="card flex flex-col gap-4">
-            <h2 className="text-2xl font-bold">{supplier}</h2>
+            <div>
+              <h2 className="text-2xl font-bold">{supplier}</h2>
+              {(contact?.phone || contact?.email) && (
+                <p className="text-lg text-muted">
+                  {[contact.phone, contact.email].filter(Boolean).join(" · ")}
+                </p>
+              )}
+            </div>
 
             <ul className="flex flex-col gap-3">
               {groupProducts.map((p) => {
@@ -154,18 +180,23 @@ export function OrderBuilder({ products, shopName }: { products: Item[]; shopNam
               <a
                 href={empty ? undefined : `viber://forward?text=${encoded}`}
                 aria-disabled={empty}
-                className={`btn bg-[#7360f2] text-xl text-white ${empty ? "pointer-events-none opacity-50" : ""}`}
+                className={`btn bg-[#7360f2] text-xl text-white ${disabled}`}
               >
                 Изпрати по Viber
               </a>
+              {contact?.phone && (
+                <a
+                  href={empty ? undefined : `sms:${dialable(contact.phone)}?&body=${encoded}`}
+                  aria-disabled={empty}
+                  className={`btn btn-secondary text-xl ${disabled}`}
+                >
+                  Изпрати по SMS
+                </a>
+              )}
               <a
-                href={
-                  empty
-                    ? undefined
-                    : `mailto:?subject=${encodeURIComponent(`Поръчка${shopName ? ` — ${shopName}` : ""}`)}&body=${encoded}`
-                }
+                href={empty ? undefined : `mailto:${contact?.email ?? ""}?subject=${subject}&body=${encoded}`}
                 aria-disabled={empty}
-                className={`btn btn-secondary text-xl ${empty ? "pointer-events-none opacity-50" : ""}`}
+                className={`btn btn-secondary text-xl ${disabled}`}
               >
                 Изпрати по имейл
               </a>
@@ -177,6 +208,15 @@ export function OrderBuilder({ products, shopName }: { products: Item[]; shopNam
               >
                 {copied === supplier ? "✓ Копирано" : "Копирай текста"}
               </button>
+              {contact?.phone ? (
+                <a href={`tel:${dialable(contact.phone)}`} className="btn btn-secondary text-xl">
+                  📞 Обади се
+                </a>
+              ) : supplier === NO_SUPPLIER ? null : (
+                <Link href="/dostavchici" className="min-h-12 text-center text-lg text-primary underline">
+                  Добави телефон и имейл на {supplier}
+                </Link>
+              )}
             </div>
           </section>
         );

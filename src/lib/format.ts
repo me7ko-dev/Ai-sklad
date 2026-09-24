@@ -14,14 +14,18 @@ export function formatQty(value: number): string {
   return qtyFormat.format(value);
 }
 
+// Само цифри с най-много една десетична точка (без „1e5“, „0x10“ и подобни).
+const DECIMAL = /^(\d+\.?\d*|\.\d+)$/;
+
 // Приема „1,5“ и „1.5“. Връща null при празно или невалидно число.
 export function parseQty(raw: FormDataEntryValue | null): number | null {
   if (typeof raw !== "string") return null;
   const cleaned = raw.trim().replace(/\s/g, "").replace(",", ".");
-  if (!cleaned) return null;
+  if (!DECIMAL.test(cleaned)) return null;
   const value = Number(cleaned);
   if (!Number.isFinite(value) || value < 0 || value > 1_000_000) return null;
-  return Math.round(value * 1000) / 1000;
+  // Закръгляне през текст, за да няма грешки като 1,0005 → 1.
+  return Math.round(Number(`${cleaned}e3`)) / 1000;
 }
 
 const dateTimeFormat = new Intl.DateTimeFormat("bg-BG", {
@@ -44,4 +48,25 @@ const timeFormat = new Intl.DateTimeFormat("bg-BG", {
 
 export function formatTime(iso: string): string {
   return timeFormat.format(new Date(iso));
+}
+
+const moneyFormat = new Intl.NumberFormat("bg-BG", {
+  style: "currency",
+  currency: "EUR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export function formatMoney(value: number): string {
+  return moneyFormat.format(value);
+}
+
+// Цена в евро: „2,40“, „2.4“, „2,40 €“. Връща null при празно или невалидно.
+export function parseMoney(raw: FormDataEntryValue | null): number | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.trim().replace(/[\s€]/g, "").replace("евро", "").replace(",", ".");
+  if (!DECIMAL.test(cleaned)) return null;
+  const value = Number(cleaned);
+  if (!Number.isFinite(value) || value < 0 || value > 100_000) return null;
+  return Math.round(Number(`${cleaned}e2`)) / 100;
 }

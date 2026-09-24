@@ -2,30 +2,33 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { KIND_LABELS, formatQty, parseQty, UNITS, type MovementKind } from "@/lib/format";
+import { KIND_LABELS, formatQty, parseMoney, parseQty, UNITS, type MovementKind } from "@/lib/format";
 import {
   archiveProduct,
   createProduct,
   isLow,
   recordMovement,
   recordMovements,
+  saveSupplier,
   undoMovement,
   updateProduct,
   type MovementRequest,
   type ProductInput,
 } from "@/lib/products";
 import { requireAuth } from "@/lib/session";
+import { UUID } from "@/lib/sync";
 
 export type FormState = { error?: string; success?: string };
 
 const KINDS: MovementKind[] = ["sale", "delivery", "adjustment"];
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function readProductInput(formData: FormData): ProductInput | string {
   const name = String(formData.get("name") ?? "").trim().replace(/\s+/g, " ");
   const unit = String(formData.get("unit") ?? "").trim();
   const minQuantity = parseQty(formData.get("min_quantity") || "0");
   const packSize = parseQty(formData.get("pack_size") || "0");
+  const priceRaw = String(formData.get("price") ?? "").trim();
+  const price = priceRaw ? parseMoney(priceRaw) : null;
   const supplier = String(formData.get("supplier") ?? "").trim();
   const aliases = String(formData.get("aliases") ?? "")
     .split(",")
@@ -38,6 +41,7 @@ function readProductInput(formData: FormData): ProductInput | string {
   if (!(UNITS as readonly string[]).includes(unit)) return "Изберете мерна единица.";
   if (minQuantity === null) return "Минималното количество не е число.";
   if (packSize === null) return "Броят в кашон не е число.";
+  if (priceRaw && price === null) return "Цената не е число. Пример: 2,40";
 
   return {
     name,
@@ -45,6 +49,7 @@ function readProductInput(formData: FormData): ProductInput | string {
     min_quantity: minQuantity,
     supplier: supplier ? supplier.slice(0, 80) : null,
     pack_size: packSize > 0 ? packSize : null,
+    price,
     aliases: aliases.map((alias) => alias.slice(0, 40)),
   };
 }
@@ -102,13 +107,14 @@ export async function recordMovementAction(_prev: FormState, formData: FormData)
   const id = String(formData.get("id") ?? "");
   const kind = String(formData.get("kind") ?? "") as MovementKind;
   const amount = parseQty(formData.get("amount"));
+  const clientId = String(formData.get("client_id") ?? "");
 
   if (!KINDS.includes(kind)) return { error: "Изберете какво се случи." };
   if (amount === null) return { error: "Въведете количество." };
   if (kind !== "adjustment" && amount === 0) return { error: "Количеството трябва да е повече от нула." };
 
   try {
-    const product = await recordMovement(id, kind, amount);
+    const product = await recordMovement(id, kind, amount, "manual", UUID.test(clientId) ? clientId : undefined);
     refreshAll();
     return {
       success: `${KIND_LABELS[kind]} записана. Сега има ${formatQty(product.quantity)} ${product.unit}`,
@@ -140,6 +146,9 @@ export async function saveVoiceAction(
   if (items.length > 50) return { error: "Твърде много редове наведнъж." };
   for (const item of items) {
     if (!UUID.test(String(item?.product_id))) return { error: "Изберете продукт за всеки ред." };
+    if (item.client_id !== undefined && !UUID.test(String(item.client_id))) {
+      return { error: "Невалиден запис." };
+    }
     if (!KINDS.includes(item.kind)) return { error: "Невалиден вид промяна." };
     if (typeof item.amount !== "number" || !Number.isFinite(item.amount) || item.amount < 0) {
       return { error: "Невалидно количество." };
@@ -150,10 +159,11 @@ export async function saveVoiceAction(
   }
 
   try {
-    const clean = items.map(({ product_id, kind, amount }) => ({
+    const clean = items.map(({ product_id, kind, amount, client_id }) => ({
       product_id,
       kind,
       amount: Math.round(amount * 1000) / 1000,
+      client_id,
     }));
     const products = await recordMovements(clean, "voice", String(transcript ?? "").slice(0, 500) || null);
     refreshAll();
@@ -185,7 +195,15 @@ export async function createQuickProductAction(name: string, unit: string): Prom
 
   try {
     const product = await createProduct(
-      { name: cleanName, unit: cleanUnit, min_quantity: 0, supplier: null, pack_size: null, aliases: [] },
+      {
+        name: cleanName,
+        unit: cleanUnit,
+        min_quantity: 0,
+        supplier: null,
+        pack_size: null,
+        price: null,
+        aliases: [],
+      },
       0,
     );
     refreshAll();
@@ -203,4 +221,29 @@ export async function undoMovementAction(formData: FormData): Promise<void> {
   if (!Number.isInteger(id) || id <= 0) return;
   await undoMovement(id);
   refreshAll();
+}
+
+export async function saveSupplierAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireAuth();
+  const previousName = String(formData.get("previous_name") ?? "").trim() || null;
+  const name = String(formData.get("name") ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
+  const phone = String(formData.get("phone") ?? "").trim().slice(0, 40);
+  const email = String(formData.get("email") ?? "").trim().slice(0, 120);
+  const note = String(formData.get("note") ?? "").trim().slice(0, 300);
+
+  if (!name) return { error: "Напишете име на доставчика." };
+  if (phone && !/^\+?[\d\s\-()]{6,}$/.test(phone)) {
+    return { error: "Телефонът трябва да съдържа само цифри, напр. 0888 123 456." };
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Имейлът не изглежда правилно." };
+
+  try {
+    await saveSupplier(previousName, { name, phone: phone || null, email: email || null, note: note || null });
+  } catch (error) {
+    return { error: errorMessage(error) };
+  }
+  refreshAll();
+  // Ново или сменено име променя списъка — показваме потвърждението най-горе.
+  if (previousName !== name) redirect(`/dostavchici?zapazeno=${encodeURIComponent(name)}`);
+  return { success: "Запазено." };
 }

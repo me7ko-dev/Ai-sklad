@@ -15,6 +15,7 @@ type Props = {
     min_quantity: number;
     supplier: string | null;
     pack_size: number | null;
+    price: number | null;
     aliases: string[];
   };
 };
@@ -55,6 +56,18 @@ export function ProductForm({ action, submitLabel, suppliers, product }: Props) 
           <input name="quantity" inputMode="decimal" defaultValue="0" className="field" />
         </label>
       )}
+
+      <label className="flex flex-col gap-2">
+        <span className="label">Продажна цена в евро (по желание)</span>
+        <input
+          name="price"
+          inputMode="decimal"
+          defaultValue={product?.price != null ? String(product.price).replace(".", ",") : ""}
+          placeholder="напр. 2,40"
+          className="field"
+        />
+        <span className="text-lg text-muted">За една мерна единица. Нужна е за оборота.</span>
+      </label>
 
       <label className="flex flex-col gap-2">
         <span className="label">Предупреди ме, когато останат</span>

@@ -2,7 +2,10 @@
 
 import { useActionState, useState } from "react";
 import { recordMovementAction, type FormState } from "@/app/actions";
-import { formatQty, type MovementKind } from "@/lib/format";
+import { formatQty, parseQty, type MovementKind } from "@/lib/format";
+import { enqueue, newId } from "@/lib/offline-queue";
+
+const SAVED_OFFLINE = "Няма интернет — записано на телефона. Ще се изпрати само, когато има връзка.";
 
 const OPTIONS: { kind: MovementKind; label: string; hint: string }[] = [
   { kind: "sale", label: "Продадох", hint: "Колко продадохте?" },
@@ -17,14 +20,50 @@ function parse(value: string): number {
 
 export function MovementForm({
   productId,
+  name,
   unit,
   quantity,
 }: {
   productId: string;
+  name: string;
   unit: string;
   quantity: number;
 }) {
-  const [state, formAction, pending] = useActionState<FormState, FormData>(recordMovementAction, {});
+  // Без интернет записът остава на телефона със същия номер,
+  // така че няма да се запише два пъти, ако сървърът все пак го е получил.
+  const [state, formAction, pending] = useActionState<FormState, FormData>(async (previous, formData) => {
+    const clientId = newId();
+    formData.set("client_id", clientId);
+    const kind = formData.get("kind") as MovementKind;
+    const amount = parseQty(formData.get("amount"));
+
+    function saveOffline(): FormState {
+      if (amount === null || (kind !== "adjustment" && amount === 0)) {
+        return { error: "Въведете количество." };
+      }
+      const saved = enqueue([
+        {
+          client_id: clientId,
+          product_id: productId,
+          name,
+          unit,
+          kind,
+          amount,
+          at: new Date().toISOString(),
+          source: "manual",
+          note: null,
+        },
+      ]);
+      return saved ? { success: SAVED_OFFLINE } : { error: "Няма интернет и телефонът не можа да запази записа." };
+    }
+
+    if (!navigator.onLine) return saveOffline();
+    try {
+      return await recordMovementAction(previous, formData);
+    } catch {
+      return saveOffline();
+    }
+  }, {});
   const [kind, setKind] = useState<MovementKind>("sale");
   const [amount, setAmount] = useState("1");
   const current = OPTIONS.find((option) => option.kind === kind)!;

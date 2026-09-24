@@ -10,7 +10,16 @@ export type Product = {
   min_quantity: number;
   supplier: string | null;
   pack_size: number | null;
+  price: number | null;
   aliases: string[];
+};
+
+export type Supplier = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  note: string | null;
 };
 
 export type Movement = {
@@ -22,6 +31,7 @@ export type Movement = {
   note: string | null;
   created_at: string;
   undone_at: string | null;
+  unit_price: number | null;
 };
 
 export type MovementWithProduct = Movement & {
@@ -37,6 +47,8 @@ export type SummaryRow = {
   sold: number;
   delivered: number;
   adjusted: number;
+  revenue: number;
+  unpriced_sales: number;
   movements: number;
 };
 
@@ -46,6 +58,7 @@ export type ProductInput = {
   min_quantity: number;
   supplier: string | null;
   pack_size: number | null;
+  price: number | null;
   aliases: string[];
 };
 
@@ -53,11 +66,16 @@ export type MovementRequest = {
   product_id: string;
   kind: MovementKind;
   amount: number;
+  // Само за записи, направени без интернет.
+  at?: string;
+  client_id?: string;
+  note?: string | null;
 };
 
-const PRODUCT_COLUMNS = "id, name, unit, quantity, min_quantity, supplier, pack_size, aliases";
+const PRODUCT_COLUMNS = "id, name, unit, quantity, min_quantity, supplier, pack_size, price, aliases";
 const MOVEMENT_COLUMNS =
-  "id, product_id, kind, quantity_change, quantity_after, source, note, created_at, undone_at";
+  "id, product_id, kind, quantity_change, quantity_after, source, note, created_at, undone_at, unit_price";
+const SUPPLIER_COLUMNS = "id, name, phone, email, note";
 
 export function isLow(product: Product): boolean {
   return product.quantity <= product.min_quantity;
@@ -72,6 +90,7 @@ function toProduct(row: Record<string, unknown>): Product {
     min_quantity: Number(row.min_quantity),
     supplier: (row.supplier as string | null) ?? null,
     pack_size: row.pack_size == null ? null : Number(row.pack_size),
+    price: row.price == null ? null : Number(row.price),
     aliases: Array.isArray(row.aliases) ? (row.aliases as string[]) : [],
   };
 }
@@ -86,8 +105,12 @@ function toMovement(row: Record<string, unknown>): Movement {
     note: (row.note as string | null) ?? null,
     created_at: String(row.created_at),
     undone_at: (row.undone_at as string | null) ?? null,
+    unit_price: row.unit_price == null ? null : Number(row.unit_price),
   };
 }
+
+// Грешка в самите данни (напр. изтрит продукт) — повторен опит няма да помогне.
+export class DataError extends Error {}
 
 // Превежда грешките от базата на разбираем български.
 function explain(error: { code?: string; message: string }): Error {
@@ -102,10 +125,12 @@ function explain(error: { code?: string; message: string }): Error {
     );
   }
   if (error.code === "23505") {
-    return new Error("Вече има продукт с това име.");
+    if (error.message.includes("suppliers_name")) return new DataError("Вече има доставчик с това име.");
+    if (error.message.includes("client_id")) return new Error("Записът вече е изпратен.");
+    return new DataError("Вече има продукт с това име.");
   }
   if (error.code === "P0001") {
-    return new Error(error.message);
+    return new DataError(error.message);
   }
   console.error("Supabase:", error);
   return new Error("Възникна грешка при връзката с базата. Опитайте пак.");
@@ -173,6 +198,8 @@ export async function movementSummary(from: Date): Promise<SummaryRow[]> {
     sold: Number(row.sold),
     delivered: Number(row.delivered),
     adjusted: Number(row.adjusted),
+    revenue: Number(row.revenue),
+    unpriced_sales: Number(row.unpriced_sales),
     movements: Number(row.movements),
   }));
 }
@@ -212,6 +239,7 @@ export async function recordMovement(
   kind: MovementKind,
   amount: number,
   source: "manual" | "voice" = "manual",
+  clientId?: string,
 ): Promise<Product> {
   const { data, error } = await db()
     .rpc("record_movement", {
@@ -219,6 +247,7 @@ export async function recordMovement(
       p_kind: kind,
       p_amount: amount,
       p_source: source,
+      p_client_id: clientId ?? null,
     })
     .single();
   if (error) throw explain(error);
@@ -246,4 +275,66 @@ export async function undoMovement(movementId: number): Promise<Product> {
     .single();
   if (error) throw explain(error);
   return toProduct(data as Record<string, unknown>);
+}
+
+function toSupplier(row: Record<string, unknown>): Supplier {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    phone: (row.phone as string | null) ?? null,
+    email: (row.email as string | null) ?? null,
+    note: (row.note as string | null) ?? null,
+  };
+}
+
+// Доставчиците с данни плюс всички имена, записани само към продукти.
+export async function listSuppliers(): Promise<Supplier[]> {
+  const [saved, products] = await Promise.all([
+    db().from("suppliers").select(SUPPLIER_COLUMNS).order("name"),
+    db().from("products").select("supplier").eq("archived", false).not("supplier", "is", null),
+  ]);
+  if (saved.error) throw explain(saved.error);
+  if (products.error) throw explain(products.error);
+
+  const suppliers = saved.data.map(toSupplier);
+  const known = new Set(suppliers.map((s) => s.name.toLocaleLowerCase("bg")));
+  for (const row of products.data) {
+    const name = String(row.supplier).trim();
+    if (name && !known.has(name.toLocaleLowerCase("bg"))) {
+      known.add(name.toLocaleLowerCase("bg"));
+      suppliers.push({ id: "", name, phone: null, email: null, note: null });
+    }
+  }
+  return suppliers.sort((a, b) => a.name.localeCompare(b.name, "bg"));
+}
+
+export type SupplierInput = {
+  name: string;
+  phone: string | null;
+  email: string | null;
+  note: string | null;
+};
+
+// Записва доставчик. Ако името е сменено, сменя го и в продуктите му.
+export async function saveSupplier(previousName: string | null, input: SupplierInput): Promise<void> {
+  const lookup = previousName ?? input.name;
+  const existing = await db()
+    .from("suppliers")
+    .select("id")
+    .ilike("name", lookup.replace(/[%_\\]/g, "\\$&"))
+    .maybeSingle();
+  if (existing.error) throw explain(existing.error);
+
+  const result = existing.data
+    ? await db().from("suppliers").update(input).eq("id", existing.data.id)
+    : await db().from("suppliers").insert(input);
+  if (result.error) throw explain(result.error);
+
+  if (previousName && previousName !== input.name) {
+    const renamed = await db()
+      .from("products")
+      .update({ supplier: input.name, updated_at: new Date().toISOString() })
+      .eq("supplier", previousName);
+    if (renamed.error) throw explain(renamed.error);
+  }
 }

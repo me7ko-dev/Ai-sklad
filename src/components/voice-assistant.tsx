@@ -8,6 +8,7 @@ import {
 } from "@/app/actions";
 import type { VoiceResponse } from "@/app/api/glas/route";
 import { KIND_LABELS, formatQty, type MovementKind } from "@/lib/format";
+import { enqueue, newId, saveCatalog, type QueueItem } from "@/lib/offline-queue";
 
 export type PickProduct = { id: string; name: string; unit: string; quantity: number };
 
@@ -31,9 +32,12 @@ type State =
   | { step: "review"; transcript: string; reply: string; drafts: Draft[] }
   | { step: "saving"; transcript: string; reply: string; drafts: Draft[] }
   | { step: "saved"; lines: SavedLine[] }
+  | { step: "queued"; lines: QueueItem[] }
   | { step: "error"; message: string };
 
 const MAX_SECONDS = 60;
+const NO_INTERNET =
+  "Без интернет гласът не работи. Отворете продукта от списъка и запишете ръчно — ще се пази на телефона.";
 const MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
 
 const KIND_STYLE: Record<MovementKind, string> = {
@@ -82,6 +86,9 @@ export function VoiceAssistant({ products: fromServer }: { products: PickProduct
     };
   }, []);
 
+  // Пазим списъка на телефона, за да може да се работи и без интернет.
+  useEffect(() => saveCatalog(fromServer), [fromServer]);
+
   const serverIds = new Set(fromServer.map((p) => p.id));
   const products = [...fromServer, ...added.filter((p) => !serverIds.has(p.id))];
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -89,7 +96,7 @@ export function VoiceAssistant({ products: fromServer }: { products: PickProduct
 
   async function send(body: FormData | string) {
     if (!navigator.onLine) {
-      setState({ step: "error", message: "Няма интернет. Проверете връзката и опитайте пак." });
+      setState({ step: "error", message: NO_INTERNET });
       return;
     }
     setState({ step: "working" });
@@ -128,6 +135,10 @@ export function VoiceAssistant({ products: fromServer }: { products: PickProduct
   }
 
   async function startRecording() {
+    if (!navigator.onLine) {
+      setState({ step: "error", message: NO_INTERNET });
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setState({
         step: "error",
@@ -217,16 +228,47 @@ export function VoiceAssistant({ products: fromServer }: { products: PickProduct
 
   async function save() {
     if (state.step !== "review") return;
-    const drafts = state.drafts;
-    setState({ ...state, step: "saving" });
-    const result = await saveVoiceAction(
-      drafts.map((draft) => ({
+    const at = new Date().toISOString();
+    const items = state.drafts.map((draft) => {
+      const product = byId.get(draft.productId!);
+      return {
+        client_id: newId(),
         product_id: draft.productId!,
+        name: product?.name ?? draft.newName,
+        unit: product?.unit ?? draft.unit,
         kind: draft.kind,
         amount: parseAmount(draft.amount)!,
-      })),
-      state.transcript,
-    ).catch(() => ({ error: "Няма връзка със сървъра. Опитайте пак." }));
+        at,
+        source: "voice" as const,
+        note: state.transcript || null,
+      };
+    });
+
+    // Връзката е изчезнала след разпознаването — пазим на телефона.
+    function saveOffline() {
+      if (enqueue(items)) {
+        setState({ step: "queued", lines: items });
+      } else {
+        setState({ ...state, step: "review" } as State);
+        alert("Няма интернет и телефонът не можа да запази записа. Опитайте пак.");
+      }
+    }
+
+    if (!navigator.onLine) {
+      saveOffline();
+      return;
+    }
+    setState({ ...state, step: "saving" });
+    let result;
+    try {
+      result = await saveVoiceAction(
+        items.map(({ product_id, kind, amount, client_id }) => ({ product_id, kind, amount, client_id })),
+        state.transcript,
+      );
+    } catch {
+      saveOffline();
+      return;
+    }
 
     if ("error" in result) {
       setState({ ...state, step: "review" });
@@ -426,6 +468,26 @@ export function VoiceAssistant({ products: fromServer }: { products: PickProduct
               {line.kind === "adjustment" ? "" : formatQty(line.amount)} → има {formatQty(line.quantity)}{" "}
               {line.unit}
               {line.low ? " ⚠ свършва" : ""}
+            </li>
+          ))}
+        </ul>
+        <button type="button" onClick={reset} className="btn btn-primary">
+          🎤 Нов запис
+        </button>
+      </section>
+    );
+  }
+
+  if (state.step === "queued") {
+    return (
+      <section className="card flex flex-col gap-4" aria-live="polite">
+        <p className="rounded-xl border-2 border-amber-500 bg-amber-50 p-3 text-xl font-semibold text-amber-900">
+          Интернетът изчезна — записано на телефона. Ще се изпрати само, когато има връзка.
+        </p>
+        <ul className="flex flex-col gap-2">
+          {state.lines.map((line) => (
+            <li key={line.client_id} className="text-xl">
+              {line.name}: {KIND_LABELS[line.kind].toLowerCase()} {formatQty(line.amount)} {line.unit}
             </li>
           ))}
         </ul>
