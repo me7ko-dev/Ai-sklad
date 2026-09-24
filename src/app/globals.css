@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/* Едър шрифт и силен контраст — приложението се ползва и от по-възрастни хора. */
+:root {
+  --background: #f7f5ef;
+  --foreground: #111827;
+  --card: #ffffff;
+  --border: #d6d3cb;
+  --primary: #15803d;
+  --primary-dark: #166534;
+  --danger: #b91c1c;
+  --danger-bg: #fee2e2;
+  --muted: #4b5563;
+  font-size: 20px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-muted: var(--muted);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer components {
+  .btn {
+    @apply flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl px-5 text-2xl font-bold transition active:scale-[0.98] disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply bg-primary text-white;
+  }
+  .btn-secondary {
+    @apply border-2 border-foreground bg-card text-foreground;
+  }
+  .btn-danger {
+    @apply border-2 border-danger bg-card text-danger;
+  }
+  .field {
+    @apply min-h-16 w-full rounded-2xl border-2 border-border bg-card px-4 text-2xl outline-none focus:border-primary;
+  }
+  .label {
+    @apply text-xl font-semibold;
+  }
+  .card {
+    @apply rounded-2xl border-2 border-border bg-card p-4;
+  }
+  .alert-error {
+    @apply rounded-2xl border-2 border-danger bg-danger-bg p-4 text-xl font-semibold text-danger;
+  }
+  .alert-success {
+    @apply rounded-2xl border-2 border-primary bg-green-50 p-4 text-xl font-semibold text-green-900;
+  }
+}
