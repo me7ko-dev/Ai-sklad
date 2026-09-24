@@ -10,6 +10,9 @@ export async function proxy(request: NextRequest) {
   const loggedIn = await isValidToken(request.cookies.get(AUTH_COOKIE)?.value);
   const onLogin = request.nextUrl.pathname === "/vhod";
 
+  if (!loggedIn && request.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Не сте влезли. Отворете приложението отново." }, { status: 401 });
+  }
   if (!loggedIn && !onLogin) {
     return NextResponse.redirect(new URL("/vhod", request.url));
   }

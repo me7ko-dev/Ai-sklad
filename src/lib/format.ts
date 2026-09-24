@@ -26,7 +26,7 @@ export function parseQty(raw: FormDataEntryValue | null): number | null {
 
 const dateTimeFormat = new Intl.DateTimeFormat("bg-BG", {
   day: "numeric",
-  month: "long",
+  month: "short",
   hour: "2-digit",
   minute: "2-digit",
   timeZone: "Europe/Sofia",
@@ -34,4 +34,14 @@ const dateTimeFormat = new Intl.DateTimeFormat("bg-BG", {
 
 export function formatDateTime(iso: string): string {
   return dateTimeFormat.format(new Date(iso));
+}
+
+const timeFormat = new Intl.DateTimeFormat("bg-BG", {
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/Sofia",
+});
+
+export function formatTime(iso: string): string {
+  return timeFormat.format(new Date(iso));
 }

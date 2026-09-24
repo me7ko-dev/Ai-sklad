@@ -10,7 +10,7 @@ export default async function NewProductPage() {
   const suppliers = await listSuppliers();
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 p-4 pb-10">
+    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 p-4 pb-32">
       <BackLink />
       <h1 className="text-3xl font-bold">Нов продукт</h1>
       <ProductForm action={createProductAction} submitLabel="Добави" suppliers={suppliers} />

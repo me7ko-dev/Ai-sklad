@@ -14,6 +14,8 @@ type Props = {
     unit: string;
     min_quantity: number;
     supplier: string | null;
+    pack_size: number | null;
+    aliases: string[];
   };
 };
 
@@ -82,6 +84,34 @@ export function ProductForm({ action, submitLabel, suppliers, product }: Props) 
             <option key={supplier} value={supplier} />
           ))}
         </datalist>
+      </label>
+
+      <label className="flex flex-col gap-2">
+        <span className="label">В един кашон/стек има (по желание)</span>
+        <input
+          name="pack_size"
+          inputMode="decimal"
+          defaultValue={product?.pack_size ?? ""}
+          placeholder="напр. 6"
+          className="field"
+        />
+        <span className="text-lg text-muted">
+          Тогава може да кажете „дойдоха 3 кашона“ и приложението ще сметне бройките.
+        </span>
+      </label>
+
+      <label className="flex flex-col gap-2">
+        <span className="label">Други имена (по желание)</span>
+        <input
+          name="aliases"
+          maxLength={400}
+          defaultValue={product?.aliases.join(", ") ?? ""}
+          placeholder="напр. олио, слънчогледово"
+          className="field"
+        />
+        <span className="text-lg text-muted">
+          Как хората казват този продукт. Разделете със запетая.
+        </span>
       </label>
 
       {state.error && (

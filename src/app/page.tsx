@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ErrorBox } from "@/components/error-box";
 import { InventoryList } from "@/components/inventory-list";
+import { VoiceAssistant } from "@/components/voice-assistant";
 import { isLow, listProducts, type Product } from "@/lib/products";
 import { logout } from "./vhod/actions";
 
@@ -28,7 +29,7 @@ export default async function InventoryPage() {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 p-4 pb-32">
       <header className="flex items-center justify-between gap-4 pt-2">
-        <h1 className="text-3xl font-bold">Наличности</h1>
+        <h1 className="text-3xl font-bold">Гласов склад</h1>
         <form action={logout}>
           <button type="submit" className="min-h-12 px-2 text-lg text-muted underline">
             Изход
@@ -36,30 +37,36 @@ export default async function InventoryPage() {
         </form>
       </header>
 
-      {loadError ? <ErrorBox error={loadError} /> : null}
+      {loadError ? (
+        <ErrorBox error={loadError} />
+      ) : (
+        <VoiceAssistant
+          products={products.map(({ id, name, unit, quantity }) => ({ id, name, unit, quantity }))}
+        />
+      )}
 
       {lowCount > 0 && (
-        <p role="alert" className="alert-error text-2xl">
-          ⚠ {lowCount === 1 ? "1 продукт свършва" : `${lowCount} продукта свършват`}
-        </p>
+        <Link href="/poruchka" className="alert-error flex items-center justify-between gap-3 text-2xl">
+          <span>⚠ {lowCount === 1 ? "1 продукт свършва" : `${lowCount} продукта свършват`}</span>
+          <span className="shrink-0 text-lg underline">Поръчай →</span>
+        </Link>
       )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <h2 className="text-3xl font-bold">Наличности</h2>
+        <Link href="/nov" className="btn btn-primary min-h-14 w-auto px-4 text-xl whitespace-nowrap">
+          + Нов
+        </Link>
+      </div>
 
       {!loadError && products.length === 0 ? (
         <div className="card flex flex-col gap-3 text-center text-xl">
           <p className="text-2xl font-bold">Още няма продукти</p>
-          <p>Натиснете „Нов продукт“ отдолу, за да започнете.</p>
+          <p>Натиснете „+ Нов продукт“, за да започнете.</p>
         </div>
       ) : (
         <InventoryList items={items} />
       )}
-
-      <div className="fixed inset-x-0 bottom-0 border-t-2 border-border bg-background/95 p-4 backdrop-blur">
-        <div className="mx-auto max-w-xl">
-          <Link href="/nov" className="btn btn-primary">
-            + Нов продукт
-          </Link>
-        </div>
-      </div>
     </main>
   );
 }

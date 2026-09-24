@@ -42,7 +42,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
   const suppliers = [...new Set(all.map((p) => p.supplier).filter((s): s is string => !!s))].sort();
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-4 pb-10">
+    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-4 pb-32">
       <BackLink />
 
       {nov === "1" && (
@@ -88,18 +88,24 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
         ) : (
           <ul className="card flex flex-col divide-y-2 divide-border py-1">
             {movements.map((movement) => (
-              <li key={movement.id} className="flex items-center justify-between gap-3 py-3">
+              <li
+                key={movement.id}
+                className={`flex items-center justify-between gap-3 py-3 ${
+                  movement.undone_at ? "opacity-50" : ""
+                }`}
+              >
                 <span className="flex flex-col">
                   <span className="text-xl font-semibold">
                     {KIND_LABELS[movement.kind]}
                     {movement.source === "voice" ? " 🎤" : ""}
+                    {movement.undone_at ? " (отменено)" : ""}
                   </span>
                   <span className="text-lg text-muted">{formatDateTime(movement.created_at)}</span>
                 </span>
                 <span
                   className={`shrink-0 text-2xl font-bold ${
                     movement.quantity_change < 0 ? "text-danger" : "text-primary"
-                  }`}
+                  } ${movement.undone_at ? "line-through" : ""}`}
                 >
                   {movement.quantity_change > 0 ? "+" : ""}
                   {formatQty(movement.quantity_change)}

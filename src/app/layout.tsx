@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
+import { BottomNav } from "@/components/bottom-nav";
 import { SetupNeeded } from "@/components/setup-needed";
 import { ServiceWorker } from "@/components/service-worker";
 import { missingEnv } from "@/lib/env";
@@ -25,7 +26,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="bg" className="h-full antialiased">
       <body className="flex min-h-full flex-col">
-        {missing.length > 0 ? <SetupNeeded missing={missing} /> : children}
+        {missing.length > 0 ? (
+          <SetupNeeded missing={missing} />
+        ) : (
+          <>
+            {children}
+            <BottomNav />
+          </>
+        )}
         <ServiceWorker />
       </body>
     </html>
